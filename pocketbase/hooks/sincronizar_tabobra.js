@@ -1,104 +1,83 @@
-routerAdd('POST', '/backend/v1/sincronizar-tabobra', (e) => {
-  const body = e.requestInfo().body || {}
-  const obra_id = body.obra_id
-  const data = body.data
+routerAdd(
+  'POST',
+  '/backend/v1/ler-tabobra-onedrive',
+  (e) => {
+    const body = e.requestInfo().body || {}
+    const obra_id = body.obra_id
 
-  if (!obra_id) {
-    return e.badRequestError('Campo obrigatório obra_id.')
-  }
+    $app.logger().info('LOG 1: Requisição recebida', 'info', { obra_id })
 
-  if (!data || !Array.isArray(data)) {
-    return e.badRequestError('Campo obrigatório data (array de atividades).')
-  }
+    if (!obra_id) {
+      $app.logger().error('LOG 2: obra_id ausente', 'error', {})
+      return e.badRequestError('Campo obrigatório obra_id.')
+    }
 
-  try {
-    $app.findRecordById('obras', obra_id)
-  } catch (_) {
-    return e.notFoundError('Obra não encontrada.')
-  }
+    let obra
+    try {
+      obra = $app.findRecordById('obras', obra_id)
+      $app.logger().info('LOG 3: Obra encontrada', 'info', { 
+        obra_id, 
+        secret_onedrive: obra.get('secret_onedrive') ? 'preenchido' : 'vazio' 
+      })
+    } catch (err) {
+      $app.logger().error('LOG 4: Obra não encontrada', 'error', { obra_id, erro: err.message })
+      return e.notFoundError('Obra não encontrada.')
+    }
 
-  let count = 0
+    const secret_onedrive = obra.get('secret_onedrive')
+    if (!secret_onedrive || secret_onedrive.trim() === '') {
+      $app.logger().error('LOG 5: secret_onedrive vazio', 'error', {})
+      return e.badRequestError('URL do OneDrive não configurada para esta obra.')
+    }
 
-  try {
-    $app.runInTransaction((txApp) => {
-      const fasesCol = txApp.findCollectionByNameOrId('fases')
-      const ativCol = txApp.findCollectionByNameOrId('atividades')
-
-      for (const row of data) {
-        const nomeFase = row['Fase Obra']
-        const nomeAtividade = row['Atividades']
-        let statusExecucao = row['Status Execução']
-
-        if (statusExecucao !== 'Executado') {
-          statusExecucao = 'Não Executado'
-        }
-
-        const formatToDate = (val) => {
-          if (!val) return ''
-          if (typeof val === 'number') {
-            const d = new Date(Math.round((val - 25569) * 86400 * 1000))
-            return d.toISOString().split('T')[0]
-          }
-          if (typeof val === 'string') {
-            if (/^\d{4}-\d{2}-\d{2}/.test(val)) return val.substring(0, 10)
-            try {
-              const d = new Date(val)
-              if (!isNaN(d.getTime())) return d.toISOString().split('T')[0]
-            } catch (_) {}
-          }
-          return ''
-        }
-
-        const dataInicioPrevisto = formatToDate(row['Ini Prev'])
-        const dataFimPrevisto = formatToDate(row['Fim Prev'])
-        const responsavel = row['Resp'] || ''
-
-        if (!nomeFase || !nomeAtividade) continue
-
-        let faseId
-        try {
-          const existingFase = txApp.findFirstRecordByFilter(
-            'fases',
-            'obra_id = {:obraId} && nome_fase = {:nome}',
-            { obraId: obra_id, nome: nomeFase },
-          )
-          faseId = existingFase.id
-        } catch (_) {
-          const newFase = new Record(fasesCol)
-          newFase.set('obra_id', obra_id)
-          newFase.set('nome_fase', nomeFase)
-          txApp.save(newFase)
-          faseId = newFase.id
-        }
-
-        try {
-          const existingAtiv = txApp.findFirstRecordByFilter(
-            'atividades',
-            'fase_id = {:faseId} && nome_atividade = {:nome}',
-            { faseId: faseId, nome: nomeAtividade },
-          )
-          existingAtiv.set('status_execucao', statusExecucao)
-          if (dataInicioPrevisto) existingAtiv.set('data_inicio_previsto', dataInicioPrevisto)
-          if (dataFimPrevisto) existingAtiv.set('data_fim_previsto', dataFimPrevisto)
-          existingAtiv.set('responsavel', responsavel)
-          txApp.save(existingAtiv)
-        } catch (_) {
-          const newAtiv = new Record(ativCol)
-          newAtiv.set('fase_id', faseId)
-          newAtiv.set('nome_atividade', nomeAtividade)
-          newAtiv.set('status_execucao', statusExecucao)
-          if (dataInicioPrevisto) newAtiv.set('data_inicio_previsto', dataInicioPrevisto)
-          if (dataFimPrevisto) newAtiv.set('data_fim_previsto', dataFimPrevisto)
-          newAtiv.set('responsavel', responsavel)
-          txApp.save(newAtiv)
-        }
-        count++
-      }
+    $app.logger().info('LOG 6: Iniciando fetch do OneDrive', 'info', { 
+      url: secret_onedrive.substring(0, 50) + '...' 
     })
-  } catch (err) {
-    $app.logger().error('Erro na transacao de sync', 'error', err.message)
-    return e.badRequestError('Erro ao sincronizar TabObra. Tente novamente.')
-  }
 
-  return e.json(200, { data: { message: 'Sincronização concluída com sucesso', count } })
-})
+    let response
+    try {
+      response = await fetch(secret_onedrive)
+      $app.logger().info('LOG 7: Fetch retornou', 'info', { 
+        status: response.status, 
+        ok: response.ok 
+      })
+    } catch (err) {
+      $app.logger().error('LOG 8: Erro no fetch', 'error', { erro: err.message })
+      return e.json(500, { 
+        sucesso: false, 
+        erro: 'Erro ao baixar arquivo do OneDrive: ' + err.message 
+      })
+    }
+
+    if (!response.ok) {
+      $app.logger().error('LOG 9: Resposta não OK', 'error', { 
+        status: response.status, 
+        statusText: response.statusText 
+      })
+      return e.json(response.status, { 
+        sucesso: false, 
+        erro: `OneDrive retornou ${response.status}: ${response.statusText}` 
+      })
+    }
+
+    let arrayBuffer
+    try {
+      arrayBuffer = await response.arrayBuffer()
+      $app.logger().info('LOG 10: ArrayBuffer obtido', 'info', { 
+        tamanho: arrayBuffer.byteLength 
+      })
+    } catch (err) {
+      $app.logger().error('LOG 11: Erro ao ler resposta', 'error', { erro: err.message })
+      return e.json(500, { 
+        sucesso: false, 
+        erro: 'Erro ao processar arquivo: ' + err.message 
+      })
+    }
+
+    $app.logger().info('LOG 12: Arquivo baixado com sucesso', 'info', {})
+    return e.json(200, { 
+      sucesso: true, 
+      data: { message: 'Arquivo baixado com sucesso', tamanho: arrayBuffer.byteLength } 
+    })
+  },
+)
