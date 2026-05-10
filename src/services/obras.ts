@@ -93,21 +93,29 @@ export async function syncObra(obraId: string): Promise<SyncResult> {
       throw new Error('URL do OneDrive não configurada para esta obra.')
     }
 
-    console.log('Iniciando download do arquivo Excel do OneDrive...')
+    console.log('Iniciando download do arquivo Excel do OneDrive via proxy...')
 
-    let response
+    let proxyResponse
     try {
-      response = await fetch(obra.secret_onedrive)
+      proxyResponse = await pb.send('/backend/v1/download_excel_onedrive', {
+        method: 'POST',
+        body: JSON.stringify({ onedrive_url: obra.secret_onedrive }),
+        headers: { 'Content-Type': 'application/json' },
+      })
     } catch (fetchErr: any) {
-      throw new Error(`Erro ao baixar arquivo: ${fetchErr.message}`)
+      const errorMessage =
+        fetchErr.response?.erro ||
+        fetchErr.response?.message ||
+        fetchErr.message ||
+        'Erro de rede ao baixar o arquivo.'
+      throw new Error(errorMessage)
     }
 
-    if (!response.ok) {
-      throw new Error(`Erro ao baixar arquivo: ${response.statusText}`)
+    if (!proxyResponse || !proxyResponse.sucesso || !proxyResponse.data?.base64) {
+      throw new Error(proxyResponse?.erro || 'Erro ao baixar arquivo: Resposta inválida do proxy.')
     }
 
-    const arrayBuffer = await response.arrayBuffer()
-    const workbook = XLSX.read(arrayBuffer, { type: 'array', cellDates: true })
+    const workbook = XLSX.read(proxyResponse.data.base64, { type: 'base64', cellDates: true })
     const firstSheet = workbook.Sheets[workbook.SheetNames[0]]
     const data = XLSX.utils.sheet_to_json(firstSheet, { header: 1 }) as any[][]
 
