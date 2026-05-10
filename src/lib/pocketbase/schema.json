@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-05-10T20:23:25.763Z",
+  "generatedAt": "2026-05-10T20:36:17.562Z",
   "collections": [
     {
       "name": "users",
@@ -100,6 +100,12 @@
           "required": false,
           "system": false,
           "autodateTriggers": ["onCreate", "onUpdate"]
+        },
+        {
+          "name": "sync_at",
+          "type": "date",
+          "required": false,
+          "system": false
         }
       ],
       "indexes": ["CREATE INDEX idx_obras_coordenador ON obras (coordenador_id)"]
@@ -143,7 +149,10 @@
           "autodateTriggers": ["onCreate", "onUpdate"]
         }
       ],
-      "indexes": ["CREATE INDEX idx_fases_obra ON fases (obra_id)"]
+      "indexes": [
+        "CREATE INDEX idx_fases_obra ON fases (obra_id)",
+        "CREATE INDEX `idx_fases_nome` ON `fases` (nome_fase)"
+      ]
     },
     {
       "name": "atividades",
@@ -221,7 +230,10 @@
           "autodateTriggers": ["onCreate", "onUpdate"]
         }
       ],
-      "indexes": ["CREATE INDEX idx_atividades_fase ON atividades (fase_id)"]
+      "indexes": [
+        "CREATE INDEX idx_atividades_fase ON atividades (fase_id)",
+        "CREATE INDEX `idx_atividades_nome` ON `atividades` (nome_atividade)"
+      ]
     }
   ]
 }
