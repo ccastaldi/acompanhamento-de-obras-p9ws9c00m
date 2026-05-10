@@ -80,7 +80,7 @@ export const updateAtividade = (id: string, updates: Partial<Atividade>) =>
   pb.collection<Atividade>('atividades').update(id, updates)
 
 export const syncObra = async (obraId: string) => {
-  const response = await fetch('/backend/v1/sincronizar-tabobra', {
+  const response = await fetch('/api/sincronizar-tabobra', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ obra_id: obraId }),
