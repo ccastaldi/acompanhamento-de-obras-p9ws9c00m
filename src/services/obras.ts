@@ -36,18 +36,43 @@ export async function getDashboardData(): Promise<DashboardObra[]> {
   }
 }
 
-export async function getObraDetailsData(
-  obraId: string,
-): Promise<{ obra: Record; fases: Record[] }> {
+async function getObraDetailsData(obraId: string): Promise<{
+  obra: Record<string, any>
+  fases: Array<Record<string, any>>
+}> {
   try {
-    const obra = await pb.collection('obras').getOne(obraId)
-    const fases = await pb.collection('fases').getFullList({
-      filter: `obra = "${obraId}"`,
-      sort: 'ordem',
+    const obra: Record<string, any> = await pb.collection('obras').getOne(obraId)
+
+    const fases: Record<string, any>[] = await pb.collection('fases').getFullList({
+      filter: `obra_id = "${obraId}"`,
     })
-    return { obra, fases }
-  } catch (error) {
-    console.error('Erro ao buscar detalhes da obra:', error)
+
+    const fasesWithAtividades: Array<Record<string, any>> = await Promise.all(
+      fases.map(async (fase: Record<string, any>): Promise<Record<string, any>> => {
+        const atividades: Record<string, any>[] = await pb.collection('atividades').getFullList({
+          filter: `fase_id = "${fase.id}"`,
+        })
+
+        const executadas = atividades.filter(
+          (ativ: Record<string, any>) => ativ.status_execucao === 'Executado',
+        ).length
+        const total = atividades.length
+        const progress = total > 0 ? Math.round((executadas / total) * 100) : 0
+
+        return {
+          ...fase,
+          atividades,
+          progress,
+        } as Record<string, any>
+      }),
+    )
+
+    return {
+      obra,
+      fases: fasesWithAtividades,
+    }
+  } catch (error: unknown) {
+    console.error('Erro ao obter detalhes da obra:', error)
     throw error
   }
 }
