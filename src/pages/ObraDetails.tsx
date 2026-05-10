@@ -4,10 +4,78 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Progress } from '@/components/ui/progress'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Checkbox } from '@/components/ui/checkbox'
-import { ArrowLeft, CheckCircle2, Circle, AlertCircle } from 'lucide-react'
+import { ArrowLeft, CheckCircle2, Circle, AlertCircle, Camera, PenLine } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { getObraDetailsData, updateAtividadeStatus } from '@/services/obras'
+import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from '@/components/ui/accordion'
+import { getObraDetailsData, updateAtividade } from '@/services/obras'
 import { useRealtime } from '@/hooks/use-realtime'
+import { toast } from 'sonner'
+
+const ActivityCard = ({ ativ, onUpdate }: any) => {
+  const [obs, setObs] = useState(ativ.observacao || '')
+  const [url, setUrl] = useState(ativ.foto_url || '')
+
+  return (
+    <div className="flex flex-col gap-3 p-4 bg-muted/20 hover:bg-muted/30 transition-colors rounded-lg border border-muted/60">
+      <div className="flex items-start gap-3">
+        <Checkbox
+          checked={ativ.status_execucao === 'Executado'}
+          onCheckedChange={(checked) =>
+            onUpdate(ativ.id, { status_execucao: checked ? 'Executado' : 'Não Executado' })
+          }
+          className="mt-1 h-5 w-5"
+        />
+        <div className="flex-1 min-w-0">
+          <p
+            className={`text-base font-semibold leading-tight ${ativ.status_execucao === 'Executado' ? 'line-through text-muted-foreground' : 'text-foreground'}`}
+          >
+            {ativ.nome_atividade}
+          </p>
+          <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2 text-xs font-medium text-muted-foreground">
+            {ativ.responsavel && <span>Resp: {ativ.responsavel}</span>}
+            {ativ.data_inicio_previsto && (
+              <span>Início: {ativ.data_inicio_previsto.split(' ')[0]}</span>
+            )}
+            {ativ.data_fim_previsto && <span>Fim: {ativ.data_fim_previsto.split(' ')[0]}</span>}
+          </div>
+        </div>
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pl-8 mt-1">
+        <div className="relative">
+          <Camera className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="Adicionar link de foto..."
+            value={url}
+            onChange={(e) => setUrl(e.target.value)}
+            onBlur={() => {
+              if (url !== (ativ.foto_url || '')) onUpdate(ativ.id, { foto_url: url })
+            }}
+            className="h-9 pl-9 text-sm bg-background border-muted"
+          />
+        </div>
+        <div className="relative">
+          <PenLine className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+          <Textarea
+            placeholder="Adicionar observação..."
+            value={obs}
+            onChange={(e) => setObs(e.target.value)}
+            onBlur={() => {
+              if (obs !== (ativ.observacao || '')) onUpdate(ativ.id, { observacao: obs })
+            }}
+            className="min-h-[36px] py-2 pl-9 text-sm bg-background border-muted resize-none"
+          />
+        </div>
+      </div>
+    </div>
+  )
+}
 
 export default function ObraDetails() {
   const { id } = useParams()
@@ -38,14 +106,13 @@ export default function ObraDetails() {
   useRealtime('fases', loadData)
   useRealtime('atividades', loadData)
 
-  const toggleAtividade = async (atividadeId: string, currentStatus: string) => {
-    const newStatus = currentStatus === 'Executado' ? 'Não Executado' : 'Executado'
+  const handleUpdateActivity = async (atividadeId: string, updates: any) => {
     setData((prev: any) => {
       if (!prev) return prev
       const newFases = prev.fases.map((f: any) => {
         const newAtiv = f.atividades.map((a: any) => {
           if (a.id === atividadeId) {
-            return { ...a, status_execucao: newStatus }
+            return { ...a, ...updates }
           }
           return a
         })
@@ -73,8 +140,9 @@ export default function ObraDetails() {
     })
 
     try {
-      await updateAtividadeStatus(atividadeId, newStatus)
+      await updateAtividade(atividadeId, updates)
     } catch (err) {
+      toast.error('Erro ao salvar alterações.')
       loadData()
     }
   }
@@ -111,7 +179,7 @@ export default function ObraDetails() {
   const { obra, fases } = data || {}
 
   return (
-    <div className="space-y-6 sm:space-y-8 animate-fade-in max-w-5xl mx-auto">
+    <div className="space-y-6 sm:space-y-8 animate-fade-in max-w-5xl mx-auto pb-10">
       <div className="flex items-center gap-4">
         <Button
           variant="outline"
@@ -148,7 +216,7 @@ export default function ObraDetails() {
             <div className="space-y-3">
               <div className="flex justify-between items-end">
                 <span className="font-medium text-muted-foreground">Concluído</span>
-                <span className="font-bold text-3xl text-foreground leading-none">
+                <span className="font-bold text-3xl text-primary leading-none">
                   {obra?.progress}%
                 </span>
               </div>
@@ -158,40 +226,41 @@ export default function ObraDetails() {
         </CardContent>
       </Card>
 
-      <div className="pt-4">
-        <h3 className="text-xl font-bold text-foreground mb-4">Fases do Projeto</h3>
+      <div className="pt-2">
+        <h3 className="text-xl font-bold text-foreground mb-6">Fases do Projeto</h3>
 
-        <div className="grid grid-cols-1 gap-4">
-          {isLoading
-            ? [1, 2, 3].map((i) => (
-                <Card key={i} className="border-muted shadow-sm">
-                  <CardContent className="p-4 sm:p-6 flex items-center gap-4">
-                    <Skeleton className="h-10 w-10 rounded-full shrink-0" />
-                    <div className="space-y-2 flex-1">
-                      <Skeleton className="h-5 w-1/3" />
-                      <Skeleton className="h-2 w-full" />
-                    </div>
-                  </CardContent>
-                </Card>
-              ))
-            : fases?.map((phase: any, index: number) => (
-                <Card
+        {isLoading ? (
+          <div className="space-y-4">
+            {[1, 2, 3].map((i) => (
+              <Skeleton key={i} className="h-20 w-full rounded-lg" />
+            ))}
+          </div>
+        ) : fases?.length === 0 ? (
+          <div className="text-center py-10 bg-muted/20 rounded-lg border border-dashed border-muted">
+            <p className="text-muted-foreground font-medium">Nenhuma fase encontrada</p>
+          </div>
+        ) : (
+          <Accordion type="multiple" className="w-full space-y-4">
+            {fases?.map((phase: any, index: number) => {
+              const total = phase.atividades?.length || 0
+              const concluidas =
+                phase.atividades?.filter((a: any) => a.status_execucao === 'Executado').length || 0
+              return (
+                <AccordionItem
                   key={phase.id}
-                  className="border-muted shadow-sm transition-shadow animate-slide-up bg-card group"
+                  value={phase.id}
+                  className="border border-muted bg-card rounded-lg overflow-hidden shadow-sm animate-slide-up"
                   style={{ animationDelay: `${index * 100}ms`, animationFillMode: 'both' }}
                 >
-                  <CardContent className="p-4 sm:p-6 flex flex-col gap-4">
-                    <div className="flex flex-col sm:flex-row sm:items-center gap-4 sm:gap-6">
-                      <div className="flex items-center gap-4 flex-1">
+                  <AccordionTrigger className="px-5 py-4 hover:no-underline hover:bg-muted/30 transition-colors">
+                    <div className="flex flex-col sm:flex-row sm:items-center gap-4 w-full pr-4 text-left">
+                      <div className="flex items-center gap-3 shrink-0">
                         {phase.progress === 100 ? (
-                          <CheckCircle2 className="h-10 w-10 text-primary shrink-0 transition-transform group-hover:scale-110" />
+                          <CheckCircle2 className="h-8 w-8 text-primary shrink-0" />
                         ) : phase.progress > 0 ? (
-                          <div className="relative shrink-0 flex items-center justify-center h-10 w-10">
-                            <Circle className="h-10 w-10 text-muted absolute" />
-                            <svg
-                              className="h-10 w-10 -rotate-90 transition-transform group-hover:scale-110"
-                              viewBox="0 0 100 100"
-                            >
+                          <div className="relative shrink-0 flex items-center justify-center h-8 w-8">
+                            <Circle className="h-8 w-8 text-muted absolute" />
+                            <svg className="h-8 w-8 -rotate-90" viewBox="0 0 100 100">
                               <circle
                                 cx="50"
                                 cy="50"
@@ -205,53 +274,44 @@ export default function ObraDetails() {
                             </svg>
                           </div>
                         ) : (
-                          <Circle className="h-10 w-10 text-muted shrink-0 transition-transform group-hover:scale-110" />
+                          <Circle className="h-8 w-8 text-muted shrink-0" />
                         )}
-                        <div className="flex-1 min-w-0">
-                          <h4 className="text-lg font-semibold text-foreground truncate">
-                            {phase.nome_fase}
-                          </h4>
-                        </div>
                       </div>
-
-                      <div className="flex-1 w-full sm:w-auto mt-2 sm:mt-0">
-                        <div className="flex justify-between items-center text-sm mb-2">
-                          <span className="text-muted-foreground font-medium">Progresso</span>
-                          <span className="font-bold text-foreground">{phase.progress}%</span>
+                      <div className="flex-1 min-w-0">
+                        <h4 className="text-lg font-bold truncate text-foreground">
+                          {phase.nome_fase}
+                        </h4>
+                        <p className="text-sm text-muted-foreground font-medium mt-0.5">
+                          {concluidas} de {total} atividades concluídas
+                        </p>
+                      </div>
+                      <div className="w-full sm:w-48 shrink-0 mt-2 sm:mt-0">
+                        <div className="flex justify-between text-xs mb-1 font-semibold text-muted-foreground">
+                          <span>Progresso</span>
+                          <span>{phase.progress}%</span>
                         </div>
-                        <Progress value={phase.progress} className="h-2.5" />
+                        <Progress value={phase.progress} className="h-2" />
                       </div>
                     </div>
-
-                    {phase.atividades?.length > 0 && (
-                      <div className="mt-4 pt-4 border-t border-muted/50 space-y-3">
+                  </AccordionTrigger>
+                  <AccordionContent className="px-5 pb-5 pt-3 border-t border-muted bg-muted/5">
+                    {total === 0 ? (
+                      <p className="text-sm text-muted-foreground text-center py-6 font-medium">
+                        Nenhuma atividade encontrada
+                      </p>
+                    ) : (
+                      <div className="space-y-3 mt-2">
                         {phase.atividades.map((ativ: any) => (
-                          <div key={ativ.id} className="flex items-start gap-3">
-                            <Checkbox
-                              id={`ativ-${ativ.id}`}
-                              checked={ativ.status_execucao === 'Executado'}
-                              onCheckedChange={() => toggleAtividade(ativ.id, ativ.status_execucao)}
-                              className="mt-1"
-                            />
-                            <label
-                              htmlFor={`ativ-${ativ.id}`}
-                              className={`text-sm leading-tight cursor-pointer select-none transition-colors ${ativ.status_execucao === 'Executado' ? 'text-muted-foreground line-through opacity-70' : 'text-foreground'}`}
-                            >
-                              {ativ.nome_atividade}
-                              {ativ.responsavel && (
-                                <span className="block text-xs text-muted-foreground mt-0.5 no-underline opacity-100">
-                                  Resp: {ativ.responsavel}
-                                </span>
-                              )}
-                            </label>
-                          </div>
+                          <ActivityCard key={ativ.id} ativ={ativ} onUpdate={handleUpdateActivity} />
                         ))}
                       </div>
                     )}
-                  </CardContent>
-                </Card>
-              ))}
-        </div>
+                  </AccordionContent>
+                </AccordionItem>
+              )
+            })}
+          </Accordion>
+        )}
       </div>
     </div>
   )

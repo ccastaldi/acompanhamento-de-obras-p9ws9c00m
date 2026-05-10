@@ -3,16 +3,18 @@ import { useNavigate } from 'react-router-dom'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Progress } from '@/components/ui/progress'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Building2, AlertCircle } from 'lucide-react'
+import { Building2, AlertCircle, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { getDashboardData } from '@/services/obras'
+import { getDashboardData, syncObra } from '@/services/obras'
 import { useRealtime } from '@/hooks/use-realtime'
+import { toast } from 'sonner'
 
 export default function Dashboard() {
   const navigate = useNavigate()
   const [isLoading, setIsLoading] = useState(true)
   const [data, setData] = useState<any[]>([])
   const [error, setError] = useState(false)
+  const [syncingId, setSyncingId] = useState<string | null>(null)
 
   const loadData = async () => {
     try {
@@ -34,6 +36,22 @@ export default function Dashboard() {
   useRealtime('obras', loadData)
   useRealtime('fases', loadData)
   useRealtime('atividades', loadData)
+
+  const handleCardClick = async (project: any) => {
+    if (syncingId) return
+    setSyncingId(project.id)
+    try {
+      if (project.secret_onedrive) {
+        await syncObra(project.id)
+      }
+    } catch (err: any) {
+      const msg = err.response?.message || 'Erro ao sincronizar TabObra. Tente novamente.'
+      toast.error(msg)
+    } finally {
+      setSyncingId(null)
+      navigate(`/obra/${project.id}`)
+    }
+  }
 
   if (error) {
     return (
@@ -87,10 +105,18 @@ export default function Dashboard() {
           {data.map((project, index) => (
             <Card
               key={project.id}
-              className="group cursor-pointer hover:shadow-lg transition-all duration-300 hover:-translate-y-1 border-muted animate-slide-up bg-card"
+              className="group cursor-pointer hover:shadow-lg transition-all duration-300 hover:-translate-y-1 border-muted animate-slide-up bg-card relative"
               style={{ animationDelay: `${index * 100}ms`, animationFillMode: 'both' }}
-              onClick={() => navigate(`/obra/${project.id}`)}
+              onClick={() => handleCardClick(project)}
             >
+              {syncingId === project.id && (
+                <div className="absolute inset-0 bg-background/60 backdrop-blur-[1px] flex items-center justify-center z-10 rounded-lg">
+                  <div className="flex flex-col items-center gap-2">
+                    <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                    <span className="text-sm font-medium text-primary">Sincronizando...</span>
+                  </div>
+                </div>
+              )}
               <CardHeader className="pb-4">
                 <CardTitle className="text-xl font-bold leading-tight">{project.nome}</CardTitle>
               </CardHeader>

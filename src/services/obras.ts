@@ -76,5 +76,7 @@ export const getObraDetailsData = async (obraId: string) => {
   }
 }
 
-export const updateAtividadeStatus = (id: string, status: 'Executado' | 'Não Executado') =>
-  pb.collection<Atividade>('atividades').update(id, { status_execucao: status })
+export const updateAtividade = (id: string, updates: Partial<Atividade>) =>
+  pb.collection<Atividade>('atividades').update(id, updates)
+
+export const syncObra = (id: string) => pb.send(`/backend/v1/obras/${id}/sync`, { method: 'POST' })

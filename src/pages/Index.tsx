@@ -46,7 +46,7 @@ export default function Index() {
     if (success) {
       navigate('/dashboard')
     } else {
-      setError('E-mail ou senha inválidos. Por favor, tente novamente.')
+      setError('Credenciais inválidas.')
     }
   }
 
@@ -146,7 +146,7 @@ export default function Index() {
 
         <div className="mt-8 text-center text-xs text-muted-foreground space-y-1 opacity-70">
           <p>Credenciais de teste:</p>
-          <p>ccastaldi@gmail.com / Skip@Pass</p>
+          <p>cesar@singolarita.com.br / 12345678</p>
         </div>
       </div>
     </div>
