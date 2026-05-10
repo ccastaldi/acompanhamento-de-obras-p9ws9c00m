@@ -86,138 +86,33 @@ export async function updateAtividade(atividadeId: string, updates: any) {
   }
 }
 
-export async function syncObra(obraId: string, pb: PocketBase) {
+export async function syncObra(obraId: string): Promise<SyncResult> {
   try {
-    const obra = await pb.collection('obras').getOne(obraId)
-    const secret_onedrive = obra.get('secret_onedrive')
+    console.log(`[syncObra] Iniciando sincronização para obra ${obraId}`)
 
-    if (!secret_onedrive) {
-      throw new Error('URL do OneDrive não configurada para esta obra.')
-    }
-
-    console.log('Iniciando download do arquivo Excel via proxy...')
-
-    // Chamar Edge Function proxy (contorna CORS)
-    const proxyResponse = await fetch('/download-excel-onedrive', {
+    // Chamar Edge Function de sincronização (agendada a cada 5 min)
+    const response = await fetch('/sincronizar-onedrive-excel', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ onedrive_url: secret_onedrive }),
+      body: JSON.stringify({ obra_id: obraId }),
     })
 
-    if (!proxyResponse.ok) {
-      const error = await proxyResponse.json()
-      throw new Error(error.error || 'Erro ao baixar arquivo via proxy')
+    if (!response.ok) {
+      throw new Error(`Falha na sincronização: ${response.statusText}`)
     }
 
-    const proxyData = await proxyResponse.json()
-    const base64 = proxyData.data.base64
+    const data = await response.json()
 
-    // Converter base64 para arrayBuffer
-    const binaryString = atob(base64)
-    const bytes = new Uint8Array(binaryString.length)
-    for (let i = 0; i < binaryString.length; i++) {
-      bytes[i] = binaryString.charCodeAt(i)
-    }
-    const arrayBuffer = bytes.buffer
-
-    // Processar com XLSX
-    const workbook = XLSX.read(arrayBuffer, { type: 'array' })
-    const sheetName = workbook.SheetNames[0]
-    const sheet = workbook.Sheets[sheetName]
-    const data = XLSX.utils.sheet_to_json(sheet, { header: 1 })
-
-    if (data.length < 2) {
-      throw new Error('Arquivo Excel vazio ou inválido.')
-    }
-
-    const headers = data[0]
-    const colFase = headers.indexOf('Fase Obra')
-    const colAtividades = headers.indexOf('Atividades')
-    const colStatus = headers.indexOf('Status Execução')
-    const colIniPrev = headers.indexOf('Ini Prev')
-    const colFimPrev = headers.indexOf('Fim Prev')
-    const colResp = headers.indexOf('Resp')
-
-    if (colFase === -1 || colAtividades === -1 || colStatus === -1) {
-      throw new Error('Colunas obrigatórias não encontradas no Excel.')
-    }
-
-    const fasesMap = new Map()
-
-    for (let i = 1; i < data.length; i++) {
-      const row = data[i]
-      const faseNome = row[colFase]?.toString().trim()
-      const ativNome = row[colAtividades]?.toString().trim()
-
-      if (!faseNome || !ativNome) continue
-
-      if (!fasesMap.has(faseNome)) {
-        fasesMap.set(faseNome, { nome: faseNome, atividades: [] })
+    if (data.sucesso) {
+      return {
+        sucesso: true,
+        mensagem: `Sincronização concluída! ${data.sincronizadas} criadas, ${data.atualizadas} atualizadas.`,
       }
-
-      fasesMap.get(faseNome).atividades.push({
-        nome: ativNome,
-        status: row[colStatus]?.toString().trim() || '',
-        iniPrev: row[colIniPrev]?.toString().trim() || '',
-        fimPrev: row[colFimPrev]?.toString().trim() || '',
-        responsavel: row[colResp]?.toString().trim() || '',
-      })
-    }
-
-    let totalCriadas = 0
-    let totalAtualizadas = 0
-
-    for (const [faseNome, faseData] of fasesMap.entries()) {
-      let fase
-      const existingFases = await pb.collection('fases').getList(1, 1, {
-        filter: `nome = "${faseNome}" && obra = "${obraId}"`,
-      })
-
-      if (existingFases.items.length > 0) {
-        fase = existingFases.items[0]
-      } else {
-        fase = await pb.collection('fases').create({
-          nome: faseNome,
-          obra: obraId,
-        })
-        totalCriadas++
-      }
-
-      for (const ativ of faseData.atividades) {
-        const existingAtiv = await pb.collection('atividades').getList(1, 1, {
-          filter: `nome = "${ativ.nome}" && fase = "${fase.id}"`,
-        })
-
-        if (existingAtiv.items.length > 0) {
-          await pb.collection('atividades').update(existingAtiv.items[0].id, {
-            status: ativ.status,
-            iniPrev: ativ.iniPrev,
-            fimPrev: ativ.fimPrev,
-            responsavel: ativ.responsavel,
-          })
-          totalAtualizadas++
-        } else {
-          await pb.collection('atividades').create({
-            nome: ativ.nome,
-            fase: fase.id,
-            status: ativ.status,
-            iniPrev: ativ.iniPrev,
-            fimPrev: ativ.fimPrev,
-            responsavel: ativ.responsavel,
-          })
-          totalCriadas++
-        }
-      }
-    }
-
-    console.log(`Sincronização concluída: ${totalCriadas} criadas, ${totalAtualizadas} atualizadas`)
-
-    return {
-      sucesso: true,
-      mensagem: `Sincronização concluída! ${totalCriadas} criadas, ${totalAtualizadas} atualizadas.`,
+    } else {
+      throw new Error(data.erro || 'Erro desconhecido na sincronização')
     }
   } catch (error) {
-    console.error('Erro na sincronização:', error)
+    console.error('[syncObra] Erro:', error)
     return {
       sucesso: false,
       mensagem: `Erro: ${error instanceof Error ? error.message : 'Erro desconhecido'}`,
