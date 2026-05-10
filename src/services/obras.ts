@@ -12,30 +12,57 @@ export interface SyncResult {
   mensagem: string
 }
 
-export async function getDashboardData(obraId: string): Promise<DashboardData> {
-  try {
-    const fasesResult = await pb.collection('fases').getList(1, 100, {
-      filter: `obra_id = '${obraId}'`,
-    })
-    const atividades = await pb.collection('atividades').getFullList({
-      filter: `fase_id.obra_id = '${obraId}'`,
-    })
+type Record = { [key: string]: any; id: string }
 
-    const statusCounts: Record<string, number> = {}
-    atividades.forEach((ativ: any) => {
-      const status = ativ.status_execucao || 'Sem status'
-      statusCounts[status] = (statusCounts[status] || 0) + 1
-    })
+interface DashboardObra {
+  id: string
+  nome: string
+  progress: number
+  secret_onedrive?: string
+}
 
-    return {
-      totalFases: fasesResult.totalItems,
-      totalAtividades: atividades.length,
-      statusCounts,
+export async function getDashboardData(): Promise<DashboardObra[]> {
+  const obrasRecords: Record[] = await pb.collection('obras').getFullList()
+  const atividadesRecords: Record[] = await pb.collection('atividades').getFullList()
+
+  const atividadesByObraId = new Map<string, Record[]>()
+  for (const atividade of atividadesRecords) {
+    const obraId = atividade.obra
+    if (obraId && typeof obraId === 'string') {
+      if (!atividadesByObraId.has(obraId)) {
+        atividadesByObraId.set(obraId, [])
+      }
+      atividadesByObraId.get(obraId)!.push(atividade)
     }
-  } catch (error) {
-    console.error('Erro ao obter dashboard data:', error)
-    throw new Error('Falha ao carregar dados do dashboard')
   }
+
+  const dashboardObras: DashboardObra[] = []
+  for (const obra of obrasRecords) {
+    const nome: string = obra.nome_obra ?? obra.nome ?? 'Sem nome'
+    const atividades = atividadesByObraId.get(obra.id) ?? []
+    const totalAtividades = atividades.length
+    const atividadesConcluidas = atividades.filter(
+      (atividade) => atividade.status_execucao === 'Executado',
+    ).length
+    const progress =
+      totalAtividades > 0
+        ? Math.round((atividadesConcluidas / totalAtividades) * 100 * 100) / 100
+        : 0
+
+    const dashboardObra: DashboardObra = {
+      id: obra.id,
+      nome,
+      progress,
+    }
+
+    if (obra.secret_onedrive) {
+      dashboardObra.secret_onedrive = obra.secret_onedrive
+    }
+
+    dashboardObras.push(dashboardObra)
+  }
+
+  return dashboardObras
 }
 
 export async function getObraDetailsData(obraId: string) {
