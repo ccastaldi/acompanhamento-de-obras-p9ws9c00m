@@ -80,57 +80,17 @@ export const updateAtividade = (id: string, updates: Partial<Atividade>) =>
   pb.collection<Atividade>('atividades').update(id, updates)
 
 export const syncObra = async (obraId: string) => {
-  const obra = await pb.collection<Obra>('obras').getOne(obraId)
+  const response = await fetch('/backend/v1/sincronizar-tabobra', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ obra_id: obraId }),
+  })
 
-  if (!obra.secret_onedrive) {
-    throw new Error('URL do OneDrive não configurada para esta obra.')
+  if (!response.ok) {
+    const error = await response.json()
+    throw new Error(error.message || 'Erro ao sincronizar TabObra. Tente novamente.')
   }
 
-  try {
-    // 1. Download do arquivo via proxy
-    const token = pb.authStore.token
-    const proxyRes = await fetch(`${pb.baseUrl}/backend/v1/proxy-download`, {
-      method: 'POST',
-      body: JSON.stringify({ url: obra.secret_onedrive }),
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: token ? `Bearer ${token}` : '',
-      },
-    })
-
-    if (!proxyRes.ok) {
-      throw new Error('Erro ao baixar arquivo do OneDrive.')
-    }
-
-    const arrayBuffer = await proxyRes.arrayBuffer()
-
-    // 2. Parsear Excel usando a biblioteca global XLSX
-    // @ts-expect-error
-    const workbook = window.XLSX.read(arrayBuffer, { type: 'array' })
-    const sheetName = 'orc_obra'
-    if (!workbook.Sheets[sheetName]) {
-      throw new Error("Arquivo Excel inválido ou aba 'orc_obra' não encontrada.")
-    }
-
-    // @ts-expect-error
-    const data = window.XLSX.utils.sheet_to_json(workbook.Sheets[sheetName])
-
-    // 3. Enviar dados parseados para sincronização
-    const res = await pb.send('/backend/v1/sincronizar-tabobra', {
-      method: 'POST',
-      body: JSON.stringify({
-        obra_id: obraId,
-        data: data,
-      }),
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    })
-
-    return { sucesso: true, mensagem: res?.data?.message || 'TabObra sincronizada com sucesso!' }
-  } catch (err: any) {
-    const msg =
-      err.message || err.response?.message || 'Erro ao sincronizar TabObra. Tente novamente.'
-    throw new Error(msg)
-  }
+  const data = await response.json()
+  return data
 }
