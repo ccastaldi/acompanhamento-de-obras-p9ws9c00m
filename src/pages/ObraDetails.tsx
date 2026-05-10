@@ -98,10 +98,10 @@ export default function ObraDetails() {
     setIsSyncing(true)
     try {
       const res = await syncObra(id)
-      toast.success(res.mensagem || 'Sincronizado com sucesso!')
-      loadData()
+      window.alert(res.mensagem)
+      window.location.reload()
     } catch (err: any) {
-      toast.error(err.message || 'Erro ao sincronizar TabObra. Tente novamente.')
+      window.alert(`Erro: ${err.message}`)
     } finally {
       setIsSyncing(false)
     }

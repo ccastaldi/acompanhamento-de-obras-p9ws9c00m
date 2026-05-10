@@ -1,28 +1,5 @@
-import PocketBase from 'pocketbase'
+import pb from '@/lib/pocketbase/client'
 import * as XLSX from 'xlsx'
-
-type RecordId = string
-
-export interface Obra {
-  id: RecordId
-  nome: string
-}
-
-export interface Fase {
-  id: RecordId
-  nome: string
-  obra: RecordId
-}
-
-export interface Atividade {
-  id: RecordId
-  nome: string
-  fase: RecordId
-  status: string
-  iniPrev: string
-  fimPrev: string
-  responsavel: string
-}
 
 export interface DashboardData {
   totalFases: number
@@ -35,26 +12,20 @@ export interface SyncResult {
   mensagem: string
 }
 
-export async function getDashboardData(obraId: string, pb: PocketBase): Promise<DashboardData> {
+export async function getDashboardData(obraId: string): Promise<DashboardData> {
   try {
     const fasesResult = await pb.collection('fases').getList(1, 100, {
-      filter: `obra = '${obraId}'`,
-      sort: '-updated',
+      filter: `obra_id = '${obraId}'`,
     })
-    const atividades = (await pb.collection('atividades').getFullList({
-      filter: `fase.obra = '${obraId}'`,
-      sort: '-updated',
-    })) as Atividade[]
+    const atividades = await pb.collection('atividades').getFullList({
+      filter: `fase_id.obra_id = '${obraId}'`,
+    })
 
     const statusCounts: Record<string, number> = {}
-    atividades.forEach((ativ) => {
-      const status = ativ.status || 'Sem status'
+    atividades.forEach((ativ: any) => {
+      const status = ativ.status_execucao || 'Sem status'
       statusCounts[status] = (statusCounts[status] || 0) + 1
     })
-
-    console.log(
-      `Dashboard data para obra ${obraId}: ${fasesResult.totalItems} fases, ${atividades.length} atividades`,
-    )
 
     return {
       totalFases: fasesResult.totalItems,
@@ -67,205 +38,212 @@ export async function getDashboardData(obraId: string, pb: PocketBase): Promise<
   }
 }
 
-export async function getObraDetailsData(
-  obraId: string,
-  pb: PocketBase,
-): Promise<{ fases: Fase[]; atividades: Atividade[] }> {
+export async function getObraDetailsData(obraId: string) {
   try {
-    const fases = (await pb.collection('fases').getFullList({
-      filter: `obra = '${obraId}'`,
-      sort: '+nome',
-    })) as Fase[]
+    const obra = await pb.collection('obras').getOne(obraId)
+    const fases = await pb.collection('fases').getFullList({
+      filter: `obra_id = '${obraId}'`,
+      sort: '+nome_fase',
+    })
+    const atividades = await pb.collection('atividades').getFullList({
+      filter: `fase_id.obra_id = '${obraId}'`,
+      sort: '+nome_atividade',
+    })
 
-    const atividades = (await pb.collection('atividades').getFullList({
-      filter: `fase.obra = '${obraId}'`,
-      sort: '+nome',
-      expand: 'fase',
-    })) as Atividade[]
+    const fasesWithAtividades = fases.map((fase) => {
+      const ativs = atividades.filter((a) => a.fase_id === fase.id)
+      const concluidas = ativs.filter((a) => a.status_execucao === 'Executado').length
+      return {
+        ...fase,
+        atividades: ativs,
+        progress: ativs.length > 0 ? Math.round((concluidas / ativs.length) * 100) : 0,
+      }
+    })
 
-    console.log(
-      `Detalhes da obra ${obraId}: ${fases.length} fases, ${atividades.length} atividades`,
-    )
+    const totalAtivs = atividades.length
+    const totalConcluidas = atividades.filter((a) => a.status_execucao === 'Executado').length
+    const obraProgress = totalAtivs > 0 ? Math.round((totalConcluidas / totalAtivs) * 100) : 0
 
-    return { fases, atividades }
+    return {
+      obra: {
+        ...obra,
+        progress: obraProgress,
+      },
+      fases: fasesWithAtividades,
+    }
   } catch (error) {
     console.error('Erro ao obter detalhes da obra:', error)
     throw new Error('Falha ao carregar detalhes da obra')
   }
 }
 
-export async function updateAtividade(
-  atividadeId: string,
-  updates: Partial<Omit<Atividade, 'id' | 'fase' | 'nome'>>,
-  pb: PocketBase,
-): Promise<Atividade> {
+export async function updateAtividade(atividadeId: string, updates: any) {
   try {
-    const updated = (await pb.collection('atividades').update(atividadeId, updates)) as Atividade
-    console.log(`Atividade ${atividadeId} atualizada:`, updates)
-    return updated
+    return await pb.collection('atividades').update(atividadeId, updates)
   } catch (error) {
     console.error('Erro ao atualizar atividade:', error)
     throw new Error('Falha ao atualizar atividade')
   }
 }
 
-export async function syncObra(
-  excelUrl: string,
-  obraId: string,
-  pb: PocketBase,
-): Promise<SyncResult> {
+export async function syncObra(obraId: string): Promise<SyncResult> {
   try {
-    console.log(`Iniciando sincronização da obra ${obraId} do Excel: ${excelUrl}`)
-
-    const response = await fetch(excelUrl)
-    if (!response.ok) {
-      throw new Error(`Falha ao baixar Excel: ${response.statusText}`)
+    const obra = await pb.collection('obras').getOne(obraId)
+    if (!obra.secret_onedrive) {
+      throw new Error('URL do OneDrive não configurada para esta obra.')
     }
-    const arrayBuffer = await response.arrayBuffer()
 
-    const workbook = XLSX.read(arrayBuffer, { type: 'array' })
+    console.log('Iniciando download do arquivo Excel do OneDrive...')
+
+    let response
+    try {
+      response = await fetch(obra.secret_onedrive)
+    } catch (fetchErr: any) {
+      throw new Error(`Erro ao baixar arquivo: ${fetchErr.message}`)
+    }
+
+    if (!response.ok) {
+      throw new Error(`Erro ao baixar arquivo: ${response.statusText}`)
+    }
+
+    const arrayBuffer = await response.arrayBuffer()
+    const workbook = XLSX.read(arrayBuffer, { type: 'array', cellDates: true })
     const firstSheet = workbook.Sheets[workbook.SheetNames[0]]
-    const data = XLSX.utils.sheet_to_json(firstSheet, { header: 1 }) as string[][]
+    const data = XLSX.utils.sheet_to_json(firstSheet, { header: 1 }) as any[][]
 
     if (data.length < 1) {
-      throw new Error('Arquivo Excel vazio')
+      throw new Error('Arquivo Excel vazio ou inválido.')
     }
 
     const headers = data[0] as string[]
-    const colFase = headers.findIndex((h) => h?.trim() === 'Fase Obra')
-    const colAtividades = headers.findIndex((h) => h?.trim() === 'Atividades')
-    const colStatus = headers.findIndex((h) => h?.trim() === 'Status Execução')
-    const colIniPrev = headers.findIndex((h) => h?.trim() === 'Ini Prev')
-    const colFimPrev = headers.findIndex((h) => h?.trim() === 'Fim Prev')
-    const colResp = headers.findIndex((h) => h?.trim() === 'Resp')
+    const colFase = headers.findIndex((h) => typeof h === 'string' && h.trim() === 'Fase Obra')
+    const colAtividades = headers.findIndex(
+      (h) => typeof h === 'string' && h.trim() === 'Atividades',
+    )
+    const colStatus = headers.findIndex(
+      (h) => typeof h === 'string' && h.trim() === 'Status Execução',
+    )
+    const colIniPrev = headers.findIndex((h) => typeof h === 'string' && h.trim() === 'Ini Prev')
+    const colFimPrev = headers.findIndex((h) => typeof h === 'string' && h.trim() === 'Fim Prev')
+    const colResp = headers.findIndex((h) => typeof h === 'string' && h.trim() === 'Resp')
 
     const missingCols = []
     if (colFase === -1) missingCols.push('Fase Obra')
     if (colAtividades === -1) missingCols.push('Atividades')
     if (colStatus === -1) missingCols.push('Status Execução')
-    if (colIniPrev === -1) missingCols.push('Ini Prev')
-    if (colFimPrev === -1) missingCols.push('Fim Prev')
-    if (colResp === -1) missingCols.push('Resp')
 
     if (missingCols.length > 0) {
-      throw new Error(`Colunas não encontradas: ${missingCols.join(', ')}`)
+      throw new Error('Colunas obrigatórias não encontradas no Excel.')
+    }
+
+    const parseExcelDate = (val: any) => {
+      if (!val) return ''
+      let dateStr = ''
+      if (val instanceof Date) {
+        if (!isNaN(val.getTime())) dateStr = val.toISOString().split('T')[0]
+      } else if (typeof val === 'string') {
+        const parts = val.split('/')
+        if (parts.length === 3) {
+          dateStr = `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`
+        } else {
+          const d = new Date(val)
+          if (!isNaN(d.getTime())) dateStr = d.toISOString().split('T')[0]
+        }
+      }
+      return dateStr ? `${dateStr} 12:00:00.000Z` : ''
     }
 
     const fasesMap = new Map<
       string,
       {
-        nome: string
+        nome_fase: string
         atividades: {
-          nome: string
-          status: string
-          iniPrev: string
-          fimPrev: string
-          resp: string
+          nome_atividade: string
+          status_execucao: string
+          data_inicio_previsto: string
+          data_fim_previsto: string
+          responsavel: string
         }[]
       }
     >()
 
     for (let i = 1; i < data.length; i++) {
-      const row = data[i] as string[]
+      const row = data[i]
+      if (!Array.isArray(row)) continue
+
       const faseNome = row[colFase]?.toString().trim()
       const ativNome = row[colAtividades]?.toString().trim()
 
       if (!faseNome || !ativNome) continue
 
       if (!fasesMap.has(faseNome)) {
-        fasesMap.set(faseNome, { nome: faseNome, atividades: [] })
+        fasesMap.set(faseNome, { nome_fase: faseNome, atividades: [] })
       }
+
+      const statusExecucao = row[colStatus]?.toString().trim() || 'Não Executado'
+      const statusFinal = statusExecucao === 'Executado' ? 'Executado' : 'Não Executado'
+
       fasesMap.get(faseNome)!.atividades.push({
-        nome: ativNome,
-        status: row[colStatus]?.toString().trim() || '',
-        iniPrev: row[colIniPrev]?.toString().trim() || '',
-        fimPrev: row[colFimPrev]?.toString().trim() || '',
-        resp: row[colResp]?.toString().trim() || '',
+        nome_atividade: ativNome,
+        status_execucao: statusFinal,
+        data_inicio_previsto: parseExcelDate(colIniPrev !== -1 ? row[colIniPrev] : ''),
+        data_fim_previsto: parseExcelDate(colFimPrev !== -1 ? row[colFimPrev] : ''),
+        responsavel: colResp !== -1 ? row[colResp]?.toString().trim() || '' : '',
       })
     }
 
     let totalCriadas = 0
     let totalAtualizadas = 0
-    let totalDeletadas = 0
 
     for (const [faseNome, faseData] of fasesMap.entries()) {
-      console.log(`Sincronizando fase: ${faseNome} (${faseData.atividades.length} atividades)`)
-
-      // Buscar ou criar fase
-      let fase: Fase
+      let faseId: string
       const existingFases = await pb.collection('fases').getList(1, 1, {
-        filter: `nome = '${faseNome}' && obra = '${obraId}'`,
+        filter: `nome_fase = '${faseNome.replace(/'/g, "\\'")}' && obra_id = '${obraId}'`,
       })
+
       if (existingFases.items.length > 0) {
-        fase = existingFases.items[0] as Fase
-        console.log(`  - Fase existente: ${fase.id}`)
+        faseId = existingFases.items[0].id
       } else {
         const newFase = await pb.collection('fases').create({
-          nome: faseNome,
-          obra: obraId,
+          nome_fase: faseNome,
+          obra_id: obraId,
         })
-        fase = { id: newFase.id, nome: faseNome, obra: obraId }
-        totalCriadas++
-        console.log(`  - Fase criada: ${fase.id}`)
+        faseId = newFase.id
       }
 
-      // Buscar atividades existentes da fase
-      const existingAtivs = (await pb.collection('atividades').getFullList({
-        filter: `fase = '${fase.id}'`,
-      })) as Atividade[]
+      const existingAtivs = await pb.collection('atividades').getFullList({
+        filter: `fase_id = '${faseId}'`,
+      })
+      const existingAtivMap = new Map(existingAtivs.map((a) => [a.nome_atividade, a]))
 
-      const existingAtivMap = new Map(existingAtivs.map((a) => [a.nome, a]))
-      const newAtivNomes = new Set(faseData.atividades.map((a) => a.nome))
-
-      // Upsert atividades
       for (const ativ of faseData.atividades) {
-        if (existingAtivMap.has(ativ.nome)) {
-          const existing = existingAtivMap.get(ativ.nome)!
-          await pb.collection('atividades').update(existing.id, {
-            status: ativ.status,
-            iniPrev: ativ.iniPrev,
-            fimPrev: ativ.fimPrev,
-            responsavel: ativ.resp,
-          })
+        const payload: any = {
+          status_execucao: ativ.status_execucao,
+        }
+        if (ativ.data_inicio_previsto) payload.data_inicio_previsto = ativ.data_inicio_previsto
+        if (ativ.data_fim_previsto) payload.data_fim_previsto = ativ.data_fim_previsto
+        if (ativ.responsavel) payload.responsavel = ativ.responsavel
+
+        if (existingAtivMap.has(ativ.nome_atividade)) {
+          const existing = existingAtivMap.get(ativ.nome_atividade)!
+          await pb.collection('atividades').update(existing.id, payload)
           totalAtualizadas++
-          console.log(`    - Atualizada: ${ativ.nome}`)
         } else {
           await pb.collection('atividades').create({
-            nome: ativ.nome,
-            fase: fase.id,
-            status: ativ.status,
-            iniPrev: ativ.iniPrev,
-            fimPrev: ativ.fimPrev,
-            responsavel: ativ.resp,
+            nome_atividade: ativ.nome_atividade,
+            fase_id: faseId,
+            ...payload,
           })
           totalCriadas++
-          console.log(`    - Criada: ${ativ.nome}`)
-        }
-      }
-
-      // Deletar atividades obsoletas
-      for (const existing of existingAtivs) {
-        if (!newAtivNomes.has(existing.nome)) {
-          await pb.collection('atividades').delete(existing.id)
-          totalDeletadas++
-          console.log(`    - Deletada: ${existing.nome}`)
         }
       }
     }
-
-    console.log(
-      `Sincronização concluída: ${totalCriadas} criadas, ${totalAtualizadas} atualizadas, ${totalDeletadas} deletadas`,
-    )
 
     return {
       sucesso: true,
-      mensagem: `Sincronização concluída! ${totalCriadas} criadas, ${totalAtualizadas} atualizadas, ${totalDeletadas} deletadas.`,
+      mensagem: `Sincronização concluída! ${totalCriadas} criadas, ${totalAtualizadas} atualizadas.`,
     }
-  } catch (error) {
-    console.error('Erro na sincronização:', error)
-    return {
-      sucesso: false,
-      mensagem: `Erro na sincronização: ${error instanceof Error ? error.message : 'Erro desconhecido'}`,
-    }
+  } catch (error: any) {
+    throw new Error(error.message || 'Erro desconhecido')
   }
 }
