@@ -92,25 +92,16 @@ export async function updateAtividade(
 
 export async function syncObra(obraId: string): Promise<SyncResult> {
   try {
-    const response = await fetch('/backend/v1/sincronizar_onedrive_excel', {
+    const data: SyncResult = await pb.send('/backend/v1/sincronizar_onedrive_excel', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
       body: JSON.stringify({ obraId }),
     })
-
-    if (!response.ok) {
-      throw new Error(`Erro na sincronização: ${response.status} ${response.statusText}`)
-    }
-
-    const data: SyncResult = await response.json()
     return data
-  } catch (error) {
+  } catch (error: any) {
     console.error('Erro ao sincronizar obra:', error)
     return {
       sucesso: false,
-      mensagem: error instanceof Error ? error.message : 'Erro desconhecido ao sincronizar.',
+      mensagem: error.message || 'Erro desconhecido ao sincronizar.',
     }
   }
 }

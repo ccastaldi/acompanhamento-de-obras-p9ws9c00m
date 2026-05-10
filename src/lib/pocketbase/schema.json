@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-05-10T22:07:01.010Z",
+  "generatedAt": "2026-05-10T22:10:29.197Z",
   "collections": [
     {
       "name": "users",
@@ -29,29 +29,21 @@
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": [
-            "onCreate"
-          ]
+          "autodateTriggers": ["onCreate"]
         },
         {
           "name": "updated",
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": [
-            "onCreate",
-            "onUpdate"
-          ]
+          "autodateTriggers": ["onCreate", "onUpdate"]
         },
         {
           "name": "role",
           "type": "select",
           "required": false,
           "system": false,
-          "selectValues": [
-            "coordenador",
-            "empreiteiro"
-          ]
+          "selectValues": ["coordenador", "empreiteiro"]
         }
       ],
       "indexes": [
@@ -100,19 +92,14 @@
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": [
-            "onCreate"
-          ]
+          "autodateTriggers": ["onCreate"]
         },
         {
           "name": "updated",
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": [
-            "onCreate",
-            "onUpdate"
-          ]
+          "autodateTriggers": ["onCreate", "onUpdate"]
         },
         {
           "name": "sync_at",
@@ -121,9 +108,7 @@
           "system": false
         }
       ],
-      "indexes": [
-        "CREATE INDEX idx_obras_coordenador ON obras (coordenador_id)"
-      ]
+      "indexes": ["CREATE INDEX idx_obras_coordenador ON obras (coordenador_id)"]
     },
     {
       "name": "fases",
@@ -154,19 +139,14 @@
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": [
-            "onCreate"
-          ]
+          "autodateTriggers": ["onCreate"]
         },
         {
           "name": "updated",
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": [
-            "onCreate",
-            "onUpdate"
-          ]
+          "autodateTriggers": ["onCreate", "onUpdate"]
         }
       ],
       "indexes": [
@@ -203,10 +183,7 @@
           "type": "select",
           "required": true,
           "system": false,
-          "selectValues": [
-            "Executado",
-            "Não Executado"
-          ]
+          "selectValues": ["Executado", "Não Executado"]
         },
         {
           "name": "data_inicio_previsto",
@@ -243,19 +220,14 @@
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": [
-            "onCreate"
-          ]
+          "autodateTriggers": ["onCreate"]
         },
         {
           "name": "updated",
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": [
-            "onCreate",
-            "onUpdate"
-          ]
+          "autodateTriggers": ["onCreate", "onUpdate"]
         }
       ],
       "indexes": [

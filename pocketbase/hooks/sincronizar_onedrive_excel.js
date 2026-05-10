@@ -16,11 +16,10 @@ cronAdd('sincronizar_onedrive_excel_cron', '*/5 * * * *', () => {
 })
 
 routerAdd('POST', '/backend/v1/sincronizar_onedrive_excel', (e) => {
-  if (
-    e.request.header.get('X-Cron-Secret') !== 'cron_internal_call' &&
-    !e.hasSuperuserAuth() &&
-    !e.auth.record
-  ) {
+  const isCron = e.request.header.get('X-Cron-Secret') === 'cron_internal_call'
+  const isCoordenador = e.auth && e.auth.getString('role') === 'coordenador'
+
+  if (!isCron && !e.hasSuperuserAuth() && !isCoordenador) {
     return e.json(403, { sucesso: false, erro: 'Acesso negado.' })
   }
 
@@ -35,11 +34,12 @@ routerAdd('POST', '/backend/v1/sincronizar_onedrive_excel', (e) => {
     try {
       // Tenta chamar o hook local existente para obter o token
       const res = $http.send({
-        url: 'http://127.0.0.1:8090/backend/v1/onedrive/token',
-        method: 'GET',
+        url: 'http://127.0.0.1:8090/backend/v1/onedrive_get_token',
+        method: 'POST',
+        headers: { 'X-Cron-Secret': 'cron_internal_call' },
       })
-      if (res.statusCode === 200 && res.json && res.json.access_token) {
-        return res.json.access_token
+      if (res.statusCode === 200 && res.json && res.json.token) {
+        return res.json.token
       }
     } catch (ex) {}
 
@@ -65,15 +65,6 @@ routerAdd('POST', '/backend/v1/sincronizar_onedrive_excel', (e) => {
   }
 
   function refreshAccessToken() {
-    try {
-      const res = $http.send({
-        url: 'http://127.0.0.1:8090/backend/v1/onedrive/refresh_token',
-        method: 'POST',
-      })
-      if (res.statusCode === 200 && res.json && res.json.access_token) {
-        return res.json.access_token
-      }
-    } catch (ex) {}
     return getAccessToken()
   }
 
@@ -131,26 +122,38 @@ routerAdd('POST', '/backend/v1/sincronizar_onedrive_excel', (e) => {
       throw new Error('Arquivo não encontrado no OneDrive ou metadados inválidos.')
     }
 
-    let obrasList = []
-    try {
-      obrasList = $app.findRecordsByFilter('obras', '', '-created', 1, 0)
-    } catch (e) {}
+    const body = e.requestInfo().body || {}
+    const obraId = body.obraId
 
-    if (obrasList.length === 0) {
-      const admin =
-        $app.findFirstRecordByFilter('users', "role='coordenador'") ||
-        $app.findFirstRecordByFilter('users', '')
-      if (!admin) {
-        throw new Error('Nenhum usuário coordenador encontrado para vincular a obra.')
+    let obra
+    if (obraId) {
+      try {
+        obra = $app.findRecordById('obras', obraId)
+      } catch (err) {
+        throw new Error('Obra não encontrada para o ID fornecido.')
       }
-      const obrasCol = $app.findCollectionByNameOrId('obras')
-      const defaultObra = new Record(obrasCol)
-      defaultObra.set('nome', 'Obra Principal (Auto-gerada)')
-      defaultObra.set('coordenador_id', admin.id)
-      $app.save(defaultObra)
-      obrasList = [defaultObra]
+    } else {
+      let obrasList = []
+      try {
+        obrasList = $app.findRecordsByFilter('obras', '', '-created', 1, 0)
+      } catch (e) {}
+
+      if (obrasList.length === 0) {
+        const admin =
+          $app.findFirstRecordByFilter('users', "role='coordenador'") ||
+          $app.findFirstRecordByFilter('users', '')
+        if (!admin) {
+          throw new Error('Nenhum usuário coordenador encontrado para vincular a obra.')
+        }
+        const obrasCol = $app.findCollectionByNameOrId('obras')
+        const defaultObra = new Record(obrasCol)
+        defaultObra.set('nome', 'Obra Principal (Auto-gerada)')
+        defaultObra.set('coordenador_id', admin.id)
+        $app.save(defaultObra)
+        obrasList = [defaultObra]
+      }
+      obra = obrasList[0]
     }
-    const obra = obrasList[0]
     const storedSyncAt = obra.getString('sync_at')
 
     const lastModified = metadata.lastModifiedDateTime
@@ -257,6 +260,12 @@ routerAdd('POST', '/backend/v1/sincronizar_onedrive_excel', (e) => {
 
         if (row['Responsável']) ativRecord.set('responsavel', String(row['Responsável']))
 
+        if (row['Observação'] !== undefined) {
+          ativRecord.set('observacao', String(row['Observação']))
+        } else if (row['Observacao'] !== undefined) {
+          ativRecord.set('observacao', String(row['Observacao']))
+        }
+
         $app.save(ativRecord)
 
         if (isNew) sincronizadas++
@@ -274,7 +283,7 @@ routerAdd('POST', '/backend/v1/sincronizar_onedrive_excel', (e) => {
       }
     }
 
-    obra.set('sync_at', lastModified)
+    obra.set('sync_at', new Date().toISOString().replace('T', ' ').substring(0, 19) + 'Z')
     $app.save(obra)
 
     return e.json(200, {

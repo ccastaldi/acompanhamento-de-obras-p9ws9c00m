@@ -1,4 +1,4 @@
-routerAdd('OPTIONS', '/backend/v1/onedrive-get-token', (e) => {
+routerAdd('OPTIONS', '/backend/v1/onedrive_get_token', (e) => {
   try {
     e.response.header().set('Access-Control-Allow-Origin', '*')
     e.response.header().set('Access-Control-Allow-Methods', 'POST, OPTIONS')
