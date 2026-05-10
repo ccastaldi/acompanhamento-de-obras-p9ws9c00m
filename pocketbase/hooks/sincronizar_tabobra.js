@@ -1,18 +1,17 @@
-// @deps xlsx@0.18.5
 routerAdd(
   'POST',
   '/backend/v1/sincronizar-tabobra',
   (e) => {
     const body = e.requestInfo().body || {}
-    const secret_onedrive = body.secret_onedrive
     const obra_id = body.obra_id
-
-    if (!secret_onedrive) {
-      return e.badRequestError('Campo obrigatório secret_onedrive (URL pública do arquivo Excel).')
-    }
+    const data = body.data
 
     if (!obra_id) {
       return e.badRequestError('Campo obrigatório obra_id.')
+    }
+
+    if (!data || !Array.isArray(data)) {
+      return e.badRequestError('Campo obrigatório data (array de atividades).')
     }
 
     try {
@@ -20,37 +19,6 @@ routerAdd(
     } catch (_) {
       return e.notFoundError('Obra não encontrada.')
     }
-
-    let res
-    try {
-      res = $http.send({
-        url: secret_onedrive,
-        method: 'GET',
-        timeout: 15,
-      })
-    } catch (err) {
-      return e.badRequestError('Timeout ao baixar arquivo. Tente novamente.')
-    }
-
-    if (res.statusCode !== 200) {
-      return e.badRequestError('Erro ao sincronizar TabObra. Tente novamente.')
-    }
-
-    const xlsx = require('xlsx')
-    let workbook
-    try {
-      workbook = xlsx.read(res.body, { type: 'buffer' })
-    } catch (err) {
-      return e.badRequestError("Arquivo Excel inválido ou aba 'orc_obra' não encontrada.")
-    }
-
-    const sheetName = 'orc_obra'
-    if (!workbook.Sheets[sheetName]) {
-      return e.badRequestError("Arquivo Excel inválido ou aba 'orc_obra' não encontrada.")
-    }
-
-    const worksheet = workbook.Sheets[sheetName]
-    const data = xlsx.utils.sheet_to_json(worksheet)
 
     let count = 0
 

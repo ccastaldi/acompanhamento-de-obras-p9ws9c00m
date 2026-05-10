@@ -87,11 +87,40 @@ export const syncObra = async (obraId: string) => {
   }
 
   try {
+    // 1. Download do arquivo via proxy
+    const token = pb.authStore.token
+    const proxyRes = await fetch(`${pb.baseUrl}/backend/v1/proxy-download`, {
+      method: 'POST',
+      body: JSON.stringify({ url: obra.secret_onedrive }),
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: token ? `Bearer ${token}` : '',
+      },
+    })
+
+    if (!proxyRes.ok) {
+      throw new Error('Erro ao baixar arquivo do OneDrive.')
+    }
+
+    const arrayBuffer = await proxyRes.arrayBuffer()
+
+    // 2. Parsear Excel usando a biblioteca global XLSX
+    // @ts-expect-error
+    const workbook = window.XLSX.read(arrayBuffer, { type: 'array' })
+    const sheetName = 'orc_obra'
+    if (!workbook.Sheets[sheetName]) {
+      throw new Error("Arquivo Excel inválido ou aba 'orc_obra' não encontrada.")
+    }
+
+    // @ts-expect-error
+    const data = window.XLSX.utils.sheet_to_json(workbook.Sheets[sheetName])
+
+    // 3. Enviar dados parseados para sincronização
     const res = await pb.send('/backend/v1/sincronizar-tabobra', {
       method: 'POST',
       body: JSON.stringify({
         obra_id: obraId,
-        secret_onedrive: obra.secret_onedrive,
+        data: data,
       }),
       headers: {
         'Content-Type': 'application/json',
@@ -100,7 +129,8 @@ export const syncObra = async (obraId: string) => {
 
     return { sucesso: true, mensagem: res?.data?.message || 'TabObra sincronizada com sucesso!' }
   } catch (err: any) {
-    const msg = err.response?.message || 'Erro ao sincronizar TabObra. Tente novamente.'
+    const msg =
+      err.message || err.response?.message || 'Erro ao sincronizar TabObra. Tente novamente.'
     throw new Error(msg)
   }
 }
