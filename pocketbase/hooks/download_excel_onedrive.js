@@ -1,4 +1,3 @@
-// @deps base64-js@1.5.1
 routerAdd(
   'POST',
   '/backend/v1/download_excel_onedrive',
@@ -22,16 +21,11 @@ routerAdd(
         })
       }
 
-      const arrayBuffer = await response.arrayBuffer()
-      const base64js = require('base64-js')
-      const base64 = base64js.fromByteArray(new Uint8Array(arrayBuffer))
-
-      return e.json(200, {
-        sucesso: true,
-        data: {
-          base64: base64,
-        },
-      })
+      e.response
+        .header()
+        .set('Content-Type', response.headers.get('content-type') || 'application/octet-stream')
+      await $response.stream(e, response.body)
+      return
     } catch (error) {
       $app.logger().error('Erro proxy OneDrive:', 'err', String(error))
       return e.internalServerError('Erro de rede ao baixar o arquivo. Tente novamente.')
