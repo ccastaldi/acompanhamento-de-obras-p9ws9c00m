@@ -36,7 +36,7 @@ export async function getDashboardData(): Promise<DashboardObra[]> {
   }
 }
 
-async function getObraDetailsData(obraId: string): Promise<{
+export async function getObraDetailsData(obraId: string): Promise<{
   obra: Record<string, any>
   fases: Array<Record<string, any>>
 }> {
