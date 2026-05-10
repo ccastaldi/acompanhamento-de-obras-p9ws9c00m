@@ -1,4 +1,4 @@
-routerAdd('POST', '/backend/v1/proxy-download', async (e) => {
+routerAdd('POST', '/backend/v1/sincronizar-tabobra', async (e) => {
   const body = e.requestInfo().body || {}
   const obra_id = body.obra_id
 
