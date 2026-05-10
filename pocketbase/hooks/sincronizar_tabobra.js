@@ -1,4 +1,4 @@
-routerAdd('POST', '/backend/v1/ler-tabobra-onedrive', async (e) => {
+routerAdd('POST', '/backend/v1/proxy-download', async (e) => {
   const body = e.requestInfo().body || {}
   const obra_id = body.obra_id
 
@@ -72,8 +72,12 @@ routerAdd('POST', '/backend/v1/ler-tabobra-onedrive', async (e) => {
   }
 
   $app.logger().info('LOG 12: Arquivo baixado com sucesso', 'info', {})
+
   return e.json(200, {
     sucesso: true,
-    data: { message: 'Arquivo baixado com sucesso', tamanho: arrayBuffer.byteLength },
+    data: {
+      message: 'Arquivo baixado com sucesso',
+      tamanho: arrayBuffer.byteLength,
+    },
   })
 })
