@@ -1,38 +1,48 @@
-import { createContext, useContext, useState, ReactNode } from 'react'
+import { createContext, useContext, useEffect, useState, ReactNode } from 'react'
+import pb from '@/lib/pocketbase/client'
+import type { RecordModel } from 'pocketbase'
 
 interface AuthContextType {
   isAuthenticated: boolean
-  user: { email: string } | null
+  user: RecordModel | null
   login: (email: string, pass: string) => Promise<boolean>
   logout: () => void
+  loading: boolean
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [isAuthenticated, setIsAuthenticated] = useState(false)
-  const [user, setUser] = useState<{ email: string } | null>(null)
+  const [user, setUser] = useState<RecordModel | null>(pb.authStore.record)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    const unsubscribe = pb.authStore.onChange((_token, record) => {
+      setUser(record)
+    })
+    setLoading(false)
+    return () => {
+      unsubscribe()
+    }
+  }, [])
 
   const login = async (email: string, pass: string) => {
-    await new Promise((resolve) => setTimeout(resolve, 800))
-    if (
-      (email === 'cesar@singolarita.com' || email === 'coordenador@singolarita.com') &&
-      pass === '123456'
-    ) {
-      setIsAuthenticated(true)
-      setUser({ email })
+    try {
+      await pb.collection('users').authWithPassword(email, pass)
       return true
+    } catch (error) {
+      return false
     }
-    return false
   }
 
   const logout = () => {
-    setIsAuthenticated(false)
-    setUser(null)
+    pb.authStore.clear()
   }
 
+  const isAuthenticated = !!user
+
   return (
-    <AuthContext.Provider value={{ isAuthenticated, user, login, logout }}>
+    <AuthContext.Provider value={{ isAuthenticated, user, login, logout, loading }}>
       {children}
     </AuthContext.Provider>
   )

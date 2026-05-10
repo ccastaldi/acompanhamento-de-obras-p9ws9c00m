@@ -3,17 +3,48 @@ import { useNavigate } from 'react-router-dom'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Progress } from '@/components/ui/progress'
 import { Skeleton } from '@/components/ui/skeleton'
-import { mockProjects } from '@/data/mock'
-import { Building2 } from 'lucide-react'
+import { Building2, AlertCircle } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { getDashboardData } from '@/services/obras'
+import { useRealtime } from '@/hooks/use-realtime'
 
 export default function Dashboard() {
   const navigate = useNavigate()
   const [isLoading, setIsLoading] = useState(true)
+  const [data, setData] = useState<any[]>([])
+  const [error, setError] = useState(false)
+
+  const loadData = async () => {
+    try {
+      setError(false)
+      const res = await getDashboardData()
+      setData(res)
+    } catch (err) {
+      console.error(err)
+      setError(true)
+    } finally {
+      setIsLoading(false)
+    }
+  }
 
   useEffect(() => {
-    const timer = setTimeout(() => setIsLoading(false), 800)
-    return () => clearTimeout(timer)
+    loadData()
   }, [])
+
+  useRealtime('obras', loadData)
+  useRealtime('fases', loadData)
+  useRealtime('atividades', loadData)
+
+  if (error) {
+    return (
+      <div className="flex flex-col items-center justify-center py-20 text-center">
+        <AlertCircle className="h-10 w-10 text-destructive mb-4" />
+        <h2 className="text-xl font-semibold">Erro ao carregar dados</h2>
+        <p className="text-muted-foreground mb-4">Não foi possível carregar as obras.</p>
+        <Button onClick={loadData}>Tentar novamente</Button>
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -43,7 +74,7 @@ export default function Dashboard() {
             </Card>
           ))}
         </div>
-      ) : mockProjects.length === 0 ? (
+      ) : data.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-20 text-center animate-fade-in-up">
           <div className="h-20 w-20 rounded-full bg-muted flex items-center justify-center mb-4">
             <Building2 className="h-10 w-10 text-muted-foreground" />
@@ -53,7 +84,7 @@ export default function Dashboard() {
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {mockProjects.map((project, index) => (
+          {data.map((project, index) => (
             <Card
               key={project.id}
               className="group cursor-pointer hover:shadow-lg transition-all duration-300 hover:-translate-y-1 border-muted animate-slide-up bg-card"
@@ -61,7 +92,7 @@ export default function Dashboard() {
               onClick={() => navigate(`/obra/${project.id}`)}
             >
               <CardHeader className="pb-4">
-                <CardTitle className="text-xl font-bold leading-tight">{project.name}</CardTitle>
+                <CardTitle className="text-xl font-bold leading-tight">{project.nome}</CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="space-y-3">

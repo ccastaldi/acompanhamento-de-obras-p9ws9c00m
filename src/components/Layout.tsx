@@ -1,10 +1,18 @@
 import { Outlet, Navigate, Link } from 'react-router-dom'
 import { useAuth } from '@/hooks/use-auth'
-import { LogOut, User } from 'lucide-react'
+import { LogOut, User, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 
 export default function Layout() {
-  const { isAuthenticated, logout, user } = useAuth()
+  const { isAuthenticated, logout, user, loading } = useAuth()
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    )
+  }
 
   if (!isAuthenticated) {
     return <Navigate to="/" replace />

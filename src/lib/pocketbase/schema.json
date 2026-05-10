@@ -1,0 +1,227 @@
+{
+  "generatedAt": "2026-05-10T14:11:19.813Z",
+  "collections": [
+    {
+      "name": "users",
+      "type": "auth",
+      "apiRules": {
+        "list": "id = @request.auth.id",
+        "view": "id = @request.auth.id",
+        "create": "",
+        "update": "id = @request.auth.id",
+        "delete": "id = @request.auth.id"
+      },
+      "fields": [
+        {
+          "name": "name",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "avatar",
+          "type": "file",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        },
+        {
+          "name": "role",
+          "type": "select",
+          "required": false,
+          "system": false,
+          "selectValues": ["coordenador", "empreiteiro"]
+        }
+      ],
+      "indexes": [
+        "CREATE UNIQUE INDEX `idx_tokenKey__pb_users_auth_` ON `users` (`tokenKey`)",
+        "CREATE UNIQUE INDEX `idx_email__pb_users_auth_` ON `users` (`email`) WHERE `email` != ''"
+      ]
+    },
+    {
+      "name": "obras",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != '' && coordenador_id = @request.auth.id",
+        "view": "@request.auth.id != '' && coordenador_id = @request.auth.id",
+        "create": "@request.auth.id != '' && @request.auth.role = 'coordenador'",
+        "update": "@request.auth.id != '' && coordenador_id = @request.auth.id",
+        "delete": "@request.auth.id != '' && coordenador_id = @request.auth.id"
+      },
+      "fields": [
+        {
+          "name": "nome",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "id_cliente",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "coordenador_id",
+          "type": "relation",
+          "required": true,
+          "system": false,
+          "collectionRef": "users"
+        },
+        {
+          "name": "secret_onedrive",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": ["CREATE INDEX idx_obras_coordenador ON obras (coordenador_id)"]
+    },
+    {
+      "name": "fases",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != '' && obra_id.coordenador_id = @request.auth.id",
+        "view": "@request.auth.id != '' && obra_id.coordenador_id = @request.auth.id",
+        "create": "@request.auth.id != '' && @request.auth.role = 'coordenador'",
+        "update": "@request.auth.id != '' && obra_id.coordenador_id = @request.auth.id",
+        "delete": "@request.auth.id != '' && obra_id.coordenador_id = @request.auth.id"
+      },
+      "fields": [
+        {
+          "name": "obra_id",
+          "type": "relation",
+          "required": true,
+          "system": false,
+          "collectionRef": "obras"
+        },
+        {
+          "name": "nome_fase",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": ["CREATE INDEX idx_fases_obra ON fases (obra_id)"]
+    },
+    {
+      "name": "atividades",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != '' && fase_id.obra_id.coordenador_id = @request.auth.id",
+        "view": "@request.auth.id != '' && fase_id.obra_id.coordenador_id = @request.auth.id",
+        "create": "@request.auth.id != '' && @request.auth.role = 'coordenador'",
+        "update": "@request.auth.id != '' && fase_id.obra_id.coordenador_id = @request.auth.id",
+        "delete": "@request.auth.id != '' && fase_id.obra_id.coordenador_id = @request.auth.id"
+      },
+      "fields": [
+        {
+          "name": "fase_id",
+          "type": "relation",
+          "required": true,
+          "system": false,
+          "collectionRef": "fases"
+        },
+        {
+          "name": "nome_atividade",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "status_execucao",
+          "type": "select",
+          "required": true,
+          "system": false,
+          "selectValues": ["Executado", "Não Executado"]
+        },
+        {
+          "name": "data_inicio_previsto",
+          "type": "date",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "data_fim_previsto",
+          "type": "date",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "responsavel",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "observacao",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "foto_url",
+          "type": "url",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": ["CREATE INDEX idx_atividades_fase ON atividades (fase_id)"]
+    }
+  ]
+}

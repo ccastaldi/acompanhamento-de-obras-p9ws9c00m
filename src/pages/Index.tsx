@@ -19,16 +19,16 @@ export default function Index() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
-  const [isLoading, setIsLoading] = useState(false)
+  const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState('')
-  const { login, isAuthenticated } = useAuth()
+  const { login, isAuthenticated, loading } = useAuth()
   const navigate = useNavigate()
 
   useEffect(() => {
-    if (isAuthenticated) {
+    if (isAuthenticated && !loading) {
       navigate('/dashboard', { replace: true })
     }
-  }, [isAuthenticated, navigate])
+  }, [isAuthenticated, loading, navigate])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -39,15 +39,23 @@ export default function Index() {
       return
     }
 
-    setIsLoading(true)
+    setIsSubmitting(true)
     const success = await login(email, password)
-    setIsLoading(false)
+    setIsSubmitting(false)
 
     if (success) {
       navigate('/dashboard')
     } else {
       setError('E-mail ou senha inválidos. Por favor, tente novamente.')
     }
+  }
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-muted/30">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    )
   }
 
   return (
@@ -87,7 +95,7 @@ export default function Index() {
                   placeholder="seu@email.com"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  disabled={isLoading}
+                  disabled={isSubmitting}
                 />
               </div>
 
@@ -100,22 +108,22 @@ export default function Index() {
                     placeholder="••••••••"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    disabled={isLoading}
+                    disabled={isSubmitting}
                     className="pr-10"
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
                     className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
-                    disabled={isLoading}
+                    disabled={isSubmitting}
                   >
                     {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                   </button>
                 </div>
               </div>
 
-              <Button type="submit" className="w-full mt-6 font-semibold" disabled={isLoading}>
-                {isLoading ? (
+              <Button type="submit" className="w-full mt-6 font-semibold" disabled={isSubmitting}>
+                {isSubmitting ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                     Entrando...
@@ -138,8 +146,7 @@ export default function Index() {
 
         <div className="mt-8 text-center text-xs text-muted-foreground space-y-1 opacity-70">
           <p>Credenciais de teste:</p>
-          <p>cesar@singolarita.com / 123456</p>
-          <p>coordenador@singolarita.com / 123456</p>
+          <p>ccastaldi@gmail.com / Skip@Pass</p>
         </div>
       </div>
     </div>
