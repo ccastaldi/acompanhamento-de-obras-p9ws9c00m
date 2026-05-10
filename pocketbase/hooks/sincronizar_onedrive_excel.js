@@ -1,4 +1,3 @@
-// @deps xlsx@0.18.5
 cronAdd('sincronizar_onedrive_excel_cron', '*/5 * * * *', () => {
   try {
     const res = $http.send({
@@ -20,8 +19,6 @@ routerAdd('POST', '/backend/v1/sincronizar_onedrive_excel', (e) => {
   if (e.request.header.get('X-Cron-Secret') !== 'cron_internal_call' && !e.hasSuperuserAuth()) {
     return e.json(403, { sucesso: false, erro: 'Acesso negado.' })
   }
-
-  const xlsx = require('xlsx')
 
   const CAMINHO_ARQUIVO = 'Singolarità/projetos/tabobra.xlsx'
   const tenantId = $secrets.get('ONEDRIVE_TENANT_ID') || ''
@@ -163,18 +160,44 @@ routerAdd('POST', '/backend/v1/sincronizar_onedrive_excel', (e) => {
       })
     }
 
-    const contentUrl = `https://graph.microsoft.com/v1.0/me/drive/items/${metadata.id}/content`
-    const contentRes = fetchGraph(contentUrl, { method: 'GET' })
-    const buffer = contentRes.body
+    const worksheetsUrl = `https://graph.microsoft.com/v1.0/me/drive/items/${metadata.id}/workbook/worksheets`
+    const worksheetsRes = fetchGraph(worksheetsUrl, { method: 'GET' })
+    const worksheets = worksheetsRes.json
+    if (!worksheets || !worksheets.value || worksheets.value.length === 0) {
+      throw new Error('Nenhuma planilha encontrada no arquivo.')
+    }
+    const sheetId = worksheets.value[0].id
 
-    if (!buffer || buffer.length === 0) {
-      throw new Error('O arquivo baixado está vazio.')
+    const rangeUrl = `https://graph.microsoft.com/v1.0/me/drive/items/${metadata.id}/workbook/worksheets/${sheetId}/usedRange`
+    const rangeRes = fetchGraph(rangeUrl, { method: 'GET' })
+    const range = rangeRes.json
+
+    if (!range || !range.values) {
+      throw new Error('Nenhum dado encontrado na planilha.')
     }
 
-    const workbook = xlsx.read(buffer, { type: 'array' })
-    const sheetName = workbook.SheetNames[0]
-    const sheet = workbook.Sheets[sheetName]
-    const rows = xlsx.utils.sheet_to_json(sheet, { raw: true })
+    const rawRows = range.values
+    if (rawRows.length < 2) {
+      return e.json(200, {
+        sucesso: true,
+        mensagem: 'Planilha vazia ou sem dados além do cabeçalho',
+        sincronizadas: 0,
+        atualizadas: 0,
+      })
+    }
+
+    const headers = rawRows[0]
+    const rows = []
+    for (let i = 1; i < rawRows.length; i++) {
+      const rowData = rawRows[i]
+      const rowObj = {}
+      for (let j = 0; j < headers.length; j++) {
+        if (headers[j]) {
+          rowObj[headers[j]] = rowData[j]
+        }
+      }
+      rows.push(rowObj)
+    }
 
     let sincronizadas = 0
     let atualizadas = 0
