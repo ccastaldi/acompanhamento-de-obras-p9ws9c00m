@@ -16,7 +16,11 @@ cronAdd('sincronizar_onedrive_excel_cron', '*/5 * * * *', () => {
 })
 
 routerAdd('POST', '/backend/v1/sincronizar_onedrive_excel', (e) => {
-  if (e.request.header.get('X-Cron-Secret') !== 'cron_internal_call' && !e.hasSuperuserAuth()) {
+  if (
+    e.request.header.get('X-Cron-Secret') !== 'cron_internal_call' &&
+    !e.hasSuperuserAuth() &&
+    !e.auth.record
+  ) {
     return e.json(403, { sucesso: false, erro: 'Acesso negado.' })
   }
 
