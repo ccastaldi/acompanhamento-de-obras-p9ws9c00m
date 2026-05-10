@@ -87,69 +87,20 @@ export const syncObra = async (obraId: string) => {
   }
 
   try {
-    const response = await fetch(obra.secret_onedrive)
-    if (!response.ok) throw new Error('Erro ao baixar arquivo do OneDrive.')
+    const res = await pb.send('/backend/v1/sincronizar-tabobra', {
+      method: 'POST',
+      body: JSON.stringify({
+        obra_id: obraId,
+        secret_onedrive: obra.secret_onedrive,
+      }),
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    })
 
-    const arrayBuffer = await response.arrayBuffer()
-    const workbook = XLSX.read(arrayBuffer, { type: 'array' })
-    const worksheet = workbook.Sheets['orc_obra']
-    const data = XLSX.utils.sheet_to_json(worksheet)
-
-    // Processar dados e sincronizar com banco
-    for (const row of data) {
-      const nomeFase = row['Fase Obra']
-      const nomeAtividade = row['Atividades']
-      const statusExecucao = row['Status Execução'] || 'Não Executado'
-      const dataInicioPrevisto = row['Ini Prev']
-        ? new Date(row['Ini Prev']).toISOString().split('T')[0]
-        : ''
-      const dataFimPrevisto = row['Fim Prev']
-        ? new Date(row['Fim Prev']).toISOString().split('T')[0]
-        : ''
-      const responsavel = row['Resp'] || ''
-
-      // Criar ou atualizar fase
-      let fase = await pb
-        .collection<Fase>('fases')
-        .getFirstListItem(`obra_id="${obraId}" && nome_fase="${nomeFase}"`, { $autoCancel: false })
-        .catch(() => null)
-
-      if (!fase) {
-        fase = await pb.collection<Fase>('fases').create({
-          obra_id: obraId,
-          nome_fase: nomeFase,
-        })
-      }
-
-      // Criar ou atualizar atividade
-      let atividade = await pb
-        .collection<Atividade>('atividades')
-        .getFirstListItem(`fase_id="${fase.id}" && nome_atividade="${nomeAtividade}"`, {
-          $autoCancel: false,
-        })
-        .catch(() => null)
-
-      if (!atividade) {
-        await pb.collection<Atividade>('atividades').create({
-          fase_id: fase.id,
-          nome_atividade: nomeAtividade,
-          status_execucao: statusExecucao,
-          data_inicio_previsto: dataInicioPrevisto,
-          data_fim_previsto: dataFimPrevisto,
-          responsavel: responsavel,
-        })
-      } else {
-        await pb.collection<Atividade>('atividades').update(atividade.id, {
-          status_execucao: statusExecucao,
-          data_inicio_previsto: dataInicioPrevisto,
-          data_fim_previsto: dataFimPrevisto,
-          responsavel: responsavel,
-        })
-      }
-    }
-
-    return { sucesso: true, mensagem: 'TabObra sincronizada com sucesso!' }
+    return { sucesso: true, mensagem: res?.data?.message || 'TabObra sincronizada com sucesso!' }
   } catch (err: any) {
-    throw new Error(err.message || 'Erro ao sincronizar TabObra. Tente novamente.')
+    const msg = err.response?.message || 'Erro ao sincronizar TabObra. Tente novamente.'
+    throw new Error(msg)
   }
 }

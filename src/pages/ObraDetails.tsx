@@ -4,7 +4,15 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Progress } from '@/components/ui/progress'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Checkbox } from '@/components/ui/checkbox'
-import { ArrowLeft, CheckCircle2, Circle, AlertCircle, Camera, PenLine } from 'lucide-react'
+import {
+  ArrowLeft,
+  CheckCircle2,
+  Circle,
+  AlertCircle,
+  Camera,
+  PenLine,
+  RefreshCcw,
+} from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
@@ -14,7 +22,7 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from '@/components/ui/accordion'
-import { getObraDetailsData, updateAtividade } from '@/services/obras'
+import { getObraDetailsData, updateAtividade, syncObra } from '@/services/obras'
 import { useRealtime } from '@/hooks/use-realtime'
 import { toast } from 'sonner'
 
@@ -81,8 +89,23 @@ export default function ObraDetails() {
   const { id } = useParams()
   const navigate = useNavigate()
   const [isLoading, setIsLoading] = useState(true)
+  const [isSyncing, setIsSyncing] = useState(false)
   const [error, setError] = useState(false)
   const [data, setData] = useState<any>(null)
+
+  const handleSync = async () => {
+    if (!id) return
+    setIsSyncing(true)
+    try {
+      const res = await syncObra(id)
+      toast.success(res.mensagem || 'Sincronizado com sucesso!')
+      loadData()
+    } catch (err: any) {
+      toast.error(err.message || 'Erro ao sincronizar TabObra. Tente novamente.')
+    } finally {
+      setIsSyncing(false)
+    }
+  }
 
   const loadData = async () => {
     if (!id) return
@@ -197,6 +220,17 @@ export default function ObraDetails() {
             Detalhamento das fases da obra
           </p>
         </div>
+        {!isLoading && obra?.secret_onedrive && (
+          <Button
+            onClick={handleSync}
+            disabled={isSyncing}
+            variant="outline"
+            className="shrink-0 font-semibold"
+          >
+            <RefreshCcw className={`h-4 w-4 mr-2 sm:mr-2 ${isSyncing ? 'animate-spin' : ''}`} />
+            <span className="hidden sm:inline">Sincronizar</span>
+          </Button>
+        )}
       </div>
 
       <Card className="border-muted shadow-sm bg-card">
